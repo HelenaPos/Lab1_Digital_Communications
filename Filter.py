@@ -213,5 +213,15 @@ def predictor_filter(autocorr_vector):
         coeffs_vector : ndarray (dtype:float/complex)
             vector de coeficientes del filtro predictor óptimo
     """
-    
-
+    # We know the autocorrelation of x[n], but to use "Wiener_filter", 
+    # we must use the correlation between x[n] and the desired signal, in this 
+    # problem: d[n]=x[n+1].
+    # The correlation is rdx[m]=E[d[n]x*[n-m]]=E[x[n+1]x*[n-m]]=Rx[m+1]
+    autocorr_vector = np.asarray(autocorr_vector) 
+    # We have received samples from 0 to N (we will need the last one because 
+    # of the Rx[m+1]), but to use the Wiener_filter, we only need from 0 to N-1
+    # autocorr_vector[:-1]
+    # For the correlation, we need from sample number 1 to N: 
+    # autocorr_vector[1:]
+    coeffs_vector = Wiener_filter(autocorr_vector[:-1], autocorr_vector[1:])
+    return coeffs_vector
