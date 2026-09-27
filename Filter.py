@@ -176,14 +176,20 @@ def Wiener_filter(autocorr_vector, crosscorr_vector):
         coeffs_vector : ndarray (dtype:float/complex)
             vector de coeficientes del filtro
     """
-    autocorr_vector = np.asarray(autocorr_vector) #Sea lo que sea que me hayas pasado, ahora lo trato como un vector de numpy
+    # We recive parameters "array_like", so maybe will get a list instead of 
+    # an array, so we may not be able to use them with NumPy operations. 
+    # The solution is to make sure we are using arrays.
+    autocorr_vector = np.asarray(autocorr_vector) 
     crosscorr_vector = np.asarray(crosscorr_vector)
-    # Nosotros sabemos que viéndolo como matriz h=R^-1r, con R la de correlación y r autocorrelación
-    # 1. autocorr_vector=[Rx[0],Rx[1],...,Rx[N-1]], queremos pasarlo a matriz
-    autocorr_matrix = scia.toeplitz(autocorr_vector,np.conj(autocorr_vector)) #Si aurocorr_vector=[5,2], me da [5,2;2,5], toeplitz(primera columna, primera fila),
-    # queremos si tenemos [Rx[0],Rx[1],Rx[2]], una matriz [Rx[0],Rx[-1],Rx[-2]; Rx[1],Rx[0],Rx[-1]; Rx[2],Rx[1],Rx[0]], la conjugada es porque la autocorrelación cumple
-    # Rx[-k]=Rx*[k]
-    coeffs_vector = scia.inv(autocorr_matrix) @ crosscorr_vector # =R^-1r, @ es la multiplicación matricial, no elemento a elemento
+    # We know that we can resolve it by applying h=R^-1r,
+    # with R being the autocorrelation matrix and r "crosscorr_vector"
+    # We have autocorr_vector=[Rx[0],Rx[1],...,Rx[N-1]], but we need it
+    # as the autocorrelation matrix. To do that, we can use the following 
+    # propertie: Rx[-m]=Rx*[m]
+    autocorr_matrix = scia.toeplitz(autocorr_vector,np.conj(autocorr_vector)) 
+    coeffs_vector = scia.inv(autocorr_matrix) @ crosscorr_vector # We are 
+    # doing R^-1r. @ is for matrix multiplication, so we will not make
+    # element x element
     return coeffs_vector
     
 
