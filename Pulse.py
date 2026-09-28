@@ -175,6 +175,18 @@ def shaping(symbols, oversampling, pulse):
         samples_vector : ndarray (dtype:float/complex)
             vector de muestras de la señal pulsada
     """
+    # Conformador de pulsos (Pulse shaper)
+    symbols = np.asarray(symbols)
+    pulse = np.asarray(pulse)
+    symbols_upsampled = np.zeros(symbols.size*oversampling, dtype=symbols.dtype)
+    #Just in case it is a complex coefficient, because if we do not specify, 
+    #we might get floats
+    symbols_upsampled[::oversampling]=symbols #::x takes positions starting 
+    # at 0, advancing in steps of M, so we will get M-1 zeros between samplings
+    samples_vector = np.convolve(symbols_upsampled, pulse) # It gives N+L-1 
+    # samples
+    samples_vector=samples_vector[:symbols_upsampled.size] # We only want N
+    return samples_vector
     
 
 
