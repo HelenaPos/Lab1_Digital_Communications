@@ -19,7 +19,8 @@ class Filter:
     puede ser de coeficientes fijos o adaptativos.
     """
 
-    def __init__(self, coeffs, adapt_const=None):
+    def __init__(self, coeffs, adapt_const=None): #"None" implies that 
+    # "adapt_const" is optional
         """
         Constructor de la clase Filter.
 
@@ -31,22 +32,30 @@ class Filter:
                 constante de adaptación
         """
         # Array_like a ndarray
-        coeffs = np.asarray(coeffs)
+        coeffs = np.asarray(coeffs) # We recieve the coefficients: 
+        # h[n]=[h[0],...,h[N-1]]
         # Vector de coeficientes
         self.coeffs = coeffs
         # Número de coeficientes
         self.ncoeffs = coeffs.size
         # Potencia de 2 mayor y más cercana a ncoeffs
-        self.buffer_size = int(2 ** np.ceil(np.log2(self.ncoeffs)))
+        self.buffer_size = int(2 ** np.ceil(np.log2(self.ncoeffs))) #If we have
+        # 1 coefficient, we have a buffer size of 2^0, if we have 2, 2^1, 
+        # if we have 3, 2^2, if we have 4, 2^2,.... We can do by doing 
+        # log2(number of coefficients), we round this with ceil and 
+        # then 2^rounded. We make int(float), beacuse ceil returns a float
         # Constante de adaptación
         self.adapt_const = adapt_const
         # Vector de estados internos del filtro
-        self.circular_buffer = np.zeros(self.buffer_size + 1, dtype=complex)
-
+        self.circular_buffer = np.zeros(self.buffer_size + 1, dtype=complex) 
+        # It will contain x[0],...,x[N-1], but rigth now, we do not have them,
+        # so we will have it with 0s. dtype=complex indicates that we want to
+        # store complex number
         # Indice de la muestra de entrada
-        self.index_in = 0
+        self.index_in = 0 # Where the most recent sample is
         # Vector de índices de los coeficientes precalculados
-        self.index_vector = np.arange(self.ncoeffs)
+        self.index_vector = np.arange(self.ncoeffs) # It returns an array 
+        # with this numbers [0,1,2,...N-1]
 
     def filtering_signal(self, signal_in, nsymbols=None, delay=0):
         """
@@ -91,10 +100,16 @@ class Filter:
         """
         # Incremento el índice temporal (módulo el tamaño del
         # vector de estados internos del filtro)
-        self.index_in = (self.index_in + 1) % self.buffer_size
+        self.index_in = (self.index_in + 1) % self.buffer_size # It indicates
+        # where we are going to store this sample. We need it becase 
+        # of how we are storing the samples, to know where to start
+        # reading
         # Actualización de estados internos
         # Se crea un buffer circular en la variable z
         self.circular_buffer[self.index_in] = sample_in
+        # Example: N=4, x[0] in circular_buffer[1], x[1] in circular_buffer[2]
+        # x[2] in circular_buffer[3], x[3] in circular_buffer[0], so will have:
+        # [x[3], x[0], x[1], x[2]], because of this we need index_in
         # Cálculo de la salida
         sample_out = np.sum(
             self.circular_buffer[
@@ -102,6 +117,15 @@ class Filter:
             ]
             * self.coeffs
         )
+        # Example: N=3
+        # self.index_vector =[0, 1, 2]
+        # self.coeffs = [h[0], h[1], h[2]]
+        # self.index_in = 1 (at the beginning)
+        # self.index_in - self.index_vector = 1 -[0,1,2]=[1,0,-1]
+        # (self.index_in - self.index_vector) % self.buffer_size = [1,0,-1]%4
+        # = [1,0,3], which tell us where are x[n], x[n-1], x[n-2], so we will
+        # get them with self.circular_buffer[1,0,3]
+        #Then, we make np.sum(...*self.coeffs)=[x[n]h[n]+x[1]h[n-1]+x[2]h[n-2]]
 
         return sample_out
 
@@ -139,6 +163,8 @@ class Filter:
             * self.coeffs
         )
         return sample_out
+    
+    
 
     def adaptation(self, error):
         """
@@ -150,7 +176,10 @@ class Filter:
             error : float/complex
                 muestra del error
         """
-        
+        samples = self.circular_buffer[
+            (self.index_in - self.index_vector) % self.buffer_size
+        ]
+        self.coeffs = (self.coeffs - self.adapt_const*error*np.conj(samples))
 
 
 
