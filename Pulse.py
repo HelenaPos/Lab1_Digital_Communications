@@ -185,7 +185,7 @@ def shaping(symbols, oversampling, pulse):
     # at 0, advancing in steps of M, so we will get M-1 zeros between samplings
     samples_vector = np.convolve(symbols_upsampled, pulse) # It gives N+L-1 
     # samples
-    samples_vector=samples_vector[:symbols_upsampled.size] # We only want N
+    samples_vector=samples_vector[:symbols_upsampled.size] # We onl
     return samples_vector
     
 
