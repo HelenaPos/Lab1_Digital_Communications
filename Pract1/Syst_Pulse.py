@@ -36,11 +36,11 @@ Gray = True
 ## Parámetros del pulso
 #
 # Tipo de pulso ('rectangular' o 'RRC')
-pulse_type = "rectangular"  # "RRC"  #
+pulse_type = "RRC"  # "RRC"  #
 # Frecuencia de símbolo
 symbol_freq = 10e3
 # Duración en periodos de símbolo
-long = 10
+long = 50
 # Factor de sobremuestreo del pulso
 oversampling = 32
 # Exceso de ancho de banda
@@ -53,7 +53,7 @@ nsymbols_tx = 1000000
 # Número de bits tx
 nbits_tx = nsymbols_tx * int(np.log2(nsymbols_const))
 # SNR en decibelios
-Es_N0_dB = 100
+Es_N0_dB = 12
 # SNR en escala lineal
 Es_N0 = 10 ** (Es_N0_dB / 10)
 ## Parámetros del canal
@@ -74,45 +74,47 @@ match pulse_type:
 Phi = np.convolve(pulse, np.conj(pulse[::-1]))
 Phi_sampled = ps.sampling(Phi, oversampling)
 # Constelación
-const = 
+const = sy.QAM(nsymbols_const, energy_symbols, Gray) #const contains the rules 
+# of the modulation 16-QAM
 # Filtro
-adapt_filt = 
+adapt_filt = ft.Filter(np.conj(pulse[::-1])) # Adaptative filter: h[k]=p*[-k]
 # %% Sistema
 ###################
 ### Transmisor  ###
 ###################
 # Generación de bits tx
-tx_bits = 
+tx_bits = bn.binrand(nbits_tx)
 # Generación de símbolos QAM tx
-tx_symbols = 
+tx_symbols = const.mapping(tx_bits)
 # Conformación de pulsos
-tx_signal = 
+tx_signal = ps.shaping(tx_symbols, oversampling, pulse) #We get the 
+# amplitude-modulated signal
 ###################
 ###   Canal     ###
 ###################
-rx_signal = 
+rx_signal = ch.selective_channel(tx_signal,g,N0) # Signal + noise
 ################
 ### Receptor ###
 ################
 # Filtro adaptado
-rx_matched = 
+rx_matched = adapt_filt.filtering_signal(rx_signal)
 # Muestreo
 rx_symbols = ps.sampling(
     rx_matched, oversampling, pulse.size - 1, tx_symbols.size
 )
 # Decisor
-decided_symbols = 
+decided_symbols = const.decision_symbol_seq(rx_symbols)
 # Demapeo de bits
-rx_bits = 
+rx_bits = const.demapping(decided_symbols)
 ################
 ### Medidas  ###
 ################
 # Tasa de errores de la simulación
-SER = 
+SER = bn.error_rate(tx_symbols, decided_symbols)
 # Cálculo teórico de la tasa de errores de la simulación
-SERt = 
+SERt = const.SERt(Es_N0)
 # Tasa de errores de la simulación
-BER = 
+BER = bn.error_rate(tx_bits, rx_bits)
 # %% Resultados
 # Parámetros
 print(" Parámetros:")
@@ -148,7 +150,7 @@ plt.close()
 #
 ## Pulso transmitido
 #
-plt.figure(1, suptitle="Pulso transmitido", maximize=True)
+plt.figure(1, suptitle="Pulso transmitido")
 # Extensión con ceros del pulso
 pulse_ext = np.block(
     [np.zeros(2 * oversampling), pulse, np.zeros(2 * oversampling)]
@@ -162,7 +164,7 @@ plt.continuous_signal(
 #
 ## Autocorrelación de los pulsos
 #
-plt.figure(2, suptitle="Autocorrelación del pulso", maximize=True)
+plt.figure(2, suptitle="Autocorrelación del pulso")
 Phi, Phid, n = ps.autocorrelation(pulse, oversampling)
 plt.continuous_signal(
     Phi,
@@ -183,7 +185,7 @@ plt.discrete_signal(
 #
 ## Espectro de la señal transmitida
 #
-plt.figure(3, suptitle="Espectro de la señal transmitida ", maximize=True)
+plt.figure(3, suptitle="Espectro de la señal transmitida ")
 freq_axis, spectrum_tx = ps.spectrum_estimation(tx_signal, pulse.size * 100)
 plt.spectrum(
     spectrum_tx / np.max(spectrum_tx),
@@ -205,13 +207,13 @@ const.plot_symbols(rx_symbols, title="Símbolos rx")
 ## Fragmento de la señal transmitida
 #
 plt.figure(
-    5, suptitle="Fragmento del señal transmitida (parte real)", maximize=True
+    5, suptitle="Fragmento del señal transmitida (parte real)", 
 )
 ps.plot_pulsed_signal(tx_signal, pulse, oversampling, tx_symbols, 20, "tx")
 #
 ## Fragmento de la señal recibida
 #
 plt.figure(
-    6, suptitle="Fragmento del señal recibida (parte real)", maximize=True
+    6, suptitle="Fragmento del señal recibida (parte real)", 
 )
 ps.plot_pulsed_signal(rx_signal, pulse, oversampling, rx_symbols, 20, "rx")
