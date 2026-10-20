@@ -20,6 +20,11 @@ import scipy.linalg as scia
 def LE_design(
     discrete_response, noise_autocorr, symbols_energy, ncoeffs, delay, MMSE
 ):
+    #Calculamos la autororrealción de lo que entra al filtro ZF que es a[n]*hD[n]
+    # ruido por h[n], donde tenemos que al ser independientes, nos va a dar que
+    #la autocorrelación de entrada es la suma de las dos autocorrelaciones
+    # individualmente
+    #Para calcula la correlación entre lo que entra y la señal deseada
     """
     Función que diseña los coeficientes óptimos con criterio
     MMSE del igualador LE-MMSE.
@@ -46,6 +51,54 @@ def LE_design(
             vector de coefcientes del igualador
     """
     
+    discrete_response = np.asarray(discrete_response)
+    noise_autocorr = np.asarray(noise_autocorr)
+
+    # Autocorrelación de la señal recibida sin ruido (Matriz R, todavía no completa)
+    signal_autocorr = np.convolve(discrete_response,
+        np.conj(discrete_response[::-1])
+    ) 
+
+    # Vector de autocorrelación de entrada(Matriz R): Para el filtro de Wiener
+    input_autocorr = np.zeros(ncoeffs, dtype=complex)
+
+    for k in range(ncoeffs):
+        if k < discrete_response.size:
+            input_autocorr[k] = (symbols_energy *
+                signal_autocorr[discrete_response.size - 1 + k]
+            ) #Autocorrelación de a[n]*hD[n]
+
+    # Añadir ruido únicamente para MMSE
+    if MMSE:
+        n0 = len(noise_autocorr) // 2
+        for k in range(ncoeffs):
+            if n0 + k < noise_autocorr.size:
+                input_autocorr[k] += noise_autocorr[n0 + k]
+    #En este ya sí tenemos la utocreelación real, pues incluye la de a[n]*hd[n]
+    # más la del ruido, lo cual el la autocorrelación de lo que entraría al 
+    #filtro
+
+    # Correlación cruzada entre señal deseada y recibida 
+    # (r=[Rxrecibidaa[0],Rxrecibidaa[1],...]), pues el ZF desea eliminar 
+    # la ISI, así que necesitamos que nos dé 1/hd[n], es decir,
+    #xrecibida es una señal deformada por el canal y con ruido, pero yo sólo 
+    #que el zero´forcing me devuelva la señal sin ISI, así que lo deseado es a[n]
+    # y para ello no necesito contar el ruido
+    #Señal deseada a[n-delay]
+    #Entrada al ZF=a[n]*hD[n]
+    crosscorr_vector = np.zeros(ncoeffs, dtype=complex)
+
+    for k in range(ncoeffs):
+        indice = delay - k
+        if 0 <= indice < discrete_response.size:
+            crosscorr_vector[k] = (
+                symbols_energy *
+                np.conj(discrete_response[indice])
+            )
+
+    # Diseño mediante el filtro de Wiener
+    coeffs = ft.Wiener_filter(input_autocorr, crosscorr_vector)
+
 
     return coeffs
 
@@ -230,9 +283,9 @@ def ideal_DFE_design(discrete_response, noise_autocorr, energy_const):
         discrete_response, np.conj(discrete_response[::-1])
     )
     # Espectro de la señal (sin ruido)
-    freq_axis, signal_spectrum = tf.frequency_response(signal_autocorr)
+    freq_axis, signal_spectrum = tf.frequency_response(signal_autocorr,[1])
     # Espectro del ruido
-    freq_axis, noise_spectrum = tf.frequency_response(noise_autocorr)
+    freq_axis, noise_spectrum = tf.frequency_response(noise_autocorr,[1])
     # Constantes de normalización de la factorización de la señal y el ruido
     Ks = np.exp(
         np.mean(np.log(np.abs(noise_spectrum) + np.abs(signal_spectrum)))
@@ -275,7 +328,9 @@ class LE:
             adapt_const : float (optional - default None)
                 constante de adaptación
         """
-        
+        self.QAMconst = QAMconst #Valores que puede tomar a[n] para 
+        # comparar en el decisor
+        self.Eq = ft.Filter(coeffs_vector, adapt_const) #Creamos el igualador lineal
 
 
     def equalization_decision(self, rx_samples, nsymbols, delay):
@@ -300,8 +355,15 @@ class LE:
                 vector de símbolos decididos (tamaño = nsymbols)
 
         """
-        
-
+        #Convolución de he[n] con los símbolos recibidos del canal(con ruido e
+        #ISI), retardamos porque el filtro LE estará retardado
+        #rx_samples=a[n]*hD[n]+w[n]*h[n]
+        #Ahora haremos rx_samples*hLE[n], con hLE[n] cumpliendohD[n]*hLE[n]=delta[n-delay]
+        #eq_symbols[n]=z[n+delay]
+        eq_symbols = self.Eq.filtering_signal(rx_samples, nsymbols, delay)
+        #Decidir los símbolos a partir de las muestras ya filtradas
+        decided_symbols = self.QAMconst.decision_symbol_seq(eq_symbols)
+        return eq_symbols, decided_symbols
 
     def adaptive_equalization_decision(
         self, rx_samples, nsymbols, delay, training_symbols
@@ -331,7 +393,34 @@ class LE:
                 vector de símbolos decididos
                 (tamaño = nsymbols - training_symbols.size)
         """
-        
+        eq_symbols = np.zeros(nsymbols, dtype=complex) #Guarda  los símbolos a
+        #la salida del igualador que esr¡tamos entrenando
+        decided_symbols = np.zeros(nsymbols - len(training_symbols), dtype=complex) # Guarda los 
+        #símbolos elegidos por el decisor
+        # Además, la primera vez que hagamos la fase de entrenamiento, hay 
+        # que dividir por 10 la mu, para adaptar mejor
+        #self.Eq.adapt_const = self.Eq.adapt_const / 10
+        for n in range(nsymbols + delay): #Porque si la salida tiene un 
+        # retardo de n muestras, estas también hay que leerlas
+            y = self.Eq.filtering_sample(rx_samples[n])
+            if n >= delay: #Sólo guardamos muestras a partir de delay, el 
+            #resto son 0
+                k = n - delay
+                eq_symbols[k] = y
+                #Si todavía estamos usando los símbolos de entrenamiento
+                if k < len(training_symbols):
+                    
+                    error = y - training_symbols[k]
+                #Si ya se ha acabado la fase de entrenamiento
+                else:
+                    if k == len(training_symbols):
+                        self.Eq.adapt_const /= 10
+                    decided_symbols[k -  len(training_symbols)] = (
+                        self.QAMconst.decision_symbol(y)
+                    )
+                    error = y - decided_symbols[k -  len(training_symbols)]
+                self.Eq.adaptation(error)
+        return eq_symbols,  decided_symbols
 
 
     def response(self):

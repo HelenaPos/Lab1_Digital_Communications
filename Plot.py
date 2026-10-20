@@ -46,7 +46,8 @@ def figure(num=None, figsize=None, suptitle=None, maximize=False, layout=None):
         figure.canvas.manager.set_window_title(str(num) + ". " + suptitle)
     if maximize:
         manager = plt.get_current_fig_manager()
-        manager.window.showMaximized()
+        if hasattr(manager, "window"):
+            manager.window.showMaximized()
 
 
 def subplot(num, polar=False):
